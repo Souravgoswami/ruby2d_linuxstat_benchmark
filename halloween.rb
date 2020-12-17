@@ -21,7 +21,7 @@ pumpkin, pumpkin_touched = Image.new(File.join(__dir__, 'assets', 'pumpkin.png')
 pumpkin2, pumpkin2_touched = Image.new(File.join(__dir__, 'assets', 'pumpkin2.png'), width: 154, height: 159, color: '#770000').tap { |x| x.x, x.y = $width - x.width, $height - x.height }, false
 
 # Create the lamp post image!
-lantern = Image.new(File.join(__dir__, 'assets', 'lantern.png'), z: -100, color: '#ffff00').tap { |x| x.width, x.height = x.width / 10, x.height / 10 }.tap { |x| x.x, x.y = $width - x.width - 100, $height - x.height - 60}
+lantern = Image.new(File.join(__dir__, 'assets', 'lantern.png'), z: -100, color: '#ffff00').tap { |x| x.x, x.y = $width - x.width - 100, $height - x.height - 60}
 light = Array.new(25) { |i| Circle.new(radius: i, color: '#FFFFFF', opacity: (25.0 - i) / 200, x: lantern.x + lantern.width / 2, y: lantern.y + 20, sectors: 8) }
 
 # window of the house
