@@ -1,0 +1,15 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    linux_stat (0.7.5)
+    ruby2d (0.9.4)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  linux_stat (>= 0.7.5)
+  ruby2d (>= 0.9.4)
+
+BUNDLED WITH
+   2.1.4
