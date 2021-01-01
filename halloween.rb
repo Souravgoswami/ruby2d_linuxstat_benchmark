@@ -4,10 +4,10 @@
 %w(rubygems bundler).each(&method(:require))
 Bundler.require(:default)
 
-::STARS = 400
-::GRASS_PARTICLES = 200
-::FIRE_PARTICLES = 1000
-::PUMPKIN_FIRE_PARTICLES = 1050
+::STARS = 200
+::GRASS_PARTICLES = 150
+::FIRE_PARTICLES = 1500
+::PUMPKIN_FIRE_PARTICLES = 2600
 
 $width, $height = 640, 480
 set(title: "Happy Halloweens Day", resizable: true, fps_cap: 60, icon: File.join(__dir__, 'assets', 'icon.png'), width: $width, height: $height)
@@ -52,20 +52,24 @@ stars = Array.new(20) { Circle.new(radius: 2, z: -1000, color: '#FFFF00', x: ran
 # System monitor stuff
 fps = Text.new('FPS: 0')
 cpu_usage = Text.new('CPU: 0', y: fps.y + fps.height)
-memory_usage = Text.new('Memory: 0', y: cpu_usage.y + cpu_usage.height)
+allocated = Text.new("Allocated CPU: #{LS::ProcessInfo.nproc}", y: cpu_usage.y + cpu_usage.height)
+memory_usage = Text.new('Memory: 0', y: allocated.y + allocated.height)
 pid = Text.new('PID: 0', y: memory_usage.y + memory_usage.height)
 threads = Text.new('Threads: 0', y: pid.y + pid.height)
 command = Text.new('Command: ...', y: threads.y + threads.height)
 running_time = Text.new('Running: ...', y: command.y + command.height)
 started = Text.new('Started: ...', y: running_time.y + running_time.height)
 
+# system wise info
+battery = LS::Battery.present? ? Text.new('Battery: ...').tap { |x| x.x = $width - x.width + 4 } : nil
+global_cpu_usage = Text.new('Global CPU Usage: ...', y: battery.y + battery.height).tap { |x| x.x = $width - x.width + 12 }
+
 pumpkin1_fire, pumpkin2_fire = [], []
 PUMPKIN_FIRE_PARTICLES.times do |i|
-	pumpkin1_fire << Circle.new(x: rand(pumpkin.x + 40..pumpkin.x + pumpkin.width- 40), y: pumpkin.y + pumpkin.height - 35, radius: rand(1..5), sectors: 8, color: '#FFFF00', z: -100)
-	pumpkin2_fire << Circle.new(x: rand(pumpkin.x + 40..pumpkin.x + pumpkin.width- 40), y: pumpkin.y + pumpkin.height - 35, radius: rand(1..5), sectors: 8, color: '#FFFFFF', z: -100)
+	pumpkin1_fire << Circle.new(x: rand(pumpkin.x + 70..pumpkin.x + pumpkin.width- 70), y: pumpkin.y + pumpkin.height - 35, radius: rand(1..5), sectors: 12, color: '#FFFF00', z: -100)
+	pumpkin2_fire << Circle.new(x: rand(pumpkin.x + 40..pumpkin.x + pumpkin.width- 40), y: pumpkin.y + pumpkin.height - 35, radius: rand(1..5), sectors: 12, color: '#FFFF00', z: -100)
 end
 thr = Thread.new { }
-thr2 = Thread.new { }
 
 i = 0
 update do
@@ -75,32 +79,42 @@ update do
 	fps.text = "FPS: #{sprintf("%.2f".freeze, get(:fps))}"
 
 	unless thr.alive?
-		thr = Thread.new { cpu_usage.text = "CPU: #{sprintf("%.2f".freeze, LinuxStat::ProcessInfo.cpu_usage(sleep: 0.25))} %% (#{LinuxStat::ProcessInfo.thread_usage(sleep: 0.25)} %% on CPU #{LinuxStat::ProcessInfo.last_executed_cpu + 1})" }
+		thr = Thread.new {
+			cpu_usage.text = "CPU: #{sprintf("%.2f".freeze, LS::ProcessInfo.cpu_usage(sleep: 0.25))} %% (#{LS::ProcessInfo.thread_usage(sleep: 0.25)} %% on CPU #{LS::ProcessInfo.last_executed_cpu + 1})"
+			global_cpu_usage.text = "Total CPU Usage: #{sprintf "%.2f".freeze, LS::CPU.total_usage(0.25) }%% (#{LS::CPU.count_online} / #{LS::Sysconf.processor_configured})"
+
+			global_cpu_usage.x = $width - global_cpu_usage.width - 4
+		}
 	end
 
-	memory_usage.text = "Memory: #{LinuxStat::PrettifyBytes.convert_short_binary LinuxStat::ProcessInfo.memory * 1024}"
-	io = LinuxStat::ProcessInfo.total_io
-	pid.text = "IO: Read #{LinuxStat::PrettifyBytes.convert_short_binary io[:read_bytes]} | Write #{LinuxStat::PrettifyBytes.convert_short_binary io[:write_bytes]}"
+	memory_usage.text = "Memory: #{LS::PrettifyBytes.convert_short_binary LS::ProcessInfo.memory * 1024}"
+	io = LS::ProcessInfo.total_io
+	pid.text = "IO: Read #{LS::PrettifyBytes.convert_short_binary io[:read_bytes]} | Write #{LS::PrettifyBytes.convert_short_binary io[:write_bytes]}"
 
-	threads.text = "Threads: #{LinuxStat::ProcessInfo.threads}"
-	command.text = "Cmdline: #{LinuxStat::ProcessInfo.cmdline}"
+	threads.text = "Threads: #{LS::ProcessInfo.threads}"
+	command.text = "Cmdline: #{LS::ProcessInfo.cmdline}"
 
-	running_time.text = "Running: #{sprintf("%.2f", LinuxStat::ProcessInfo.running_time)} sec"
-	started.text = "Started: #{LinuxStat::ProcessInfo.start_time.strftime("%A, %d %b %Y, %H:%M:%S")}"
+	running_time.text = "Running: #{sprintf("%.2f", LS::ProcessInfo.running_time)} sec (state: #{LS::ProcessInfo.state})"
+	started.text = "Started: #{LS::ProcessInfo.start_time.strftime("%A, %d %b %Y, %H:%M:%S")}"
+
+	if battery
+		battery.text = "Battery: #{sprintf "%.2f", LS::Battery.charge}%% (#{LS::Battery.status})"
+		battery.x = $width - battery.width - 4
+	end
 
 	# Animate the fire (circles) drawn behind pumpkins
 	PUMPKIN_FIRE_PARTICLES.times do |index|
 		f, f2 = pumpkin1_fire[index], pumpkin2_fire[index]
 
-		f.x, f.y, f.opacity, f.radius = f.x + Math.sin(i / rand(1..3)) * 2.0, f.y - rand(5.0..8.0), f.opacity - 0.05, f.radius - 0.5
-		f.g -= 0.1 if f.g > 0
-		f.r -= 0.05 if f.r > 0
-		f.x, f.y, f.color, f.radius = rand(pumpkin.x + 40..pumpkin.x + pumpkin.width- 40), pumpkin.y + pumpkin.height - 35, [1, 1, 0, 1], rand(5..20) if (f.radius <= 0).|(f2.opacity <= 0)
+		f.x, f.y, f.opacity, f.radius = f.x + Math.sin(i / rand(1.0..8.0)) * 8.0, f.y - rand(5.0..8.0), f.opacity - 0.05, f.radius - 0.5
+		f.r -= 0.05 if f.r > 0 && rand < 0.75
+		f.b += 0.05 if f.b < 1 && rand < 0.5
+		f.x, f.y, f.color, f.radius = rand(pumpkin.x + 40..pumpkin.x + pumpkin.width - 40), pumpkin.y + pumpkin.height - 35, [1, 0, 0, 1], rand(5..20) if (f.radius <= 0).|(f2.opacity <= 0)
 
-		f2.x, f2.y, f2.opacity, f2.radius = f2.x + Math.sin(i / rand(1..3)) * 2.0, f2.y - rand(5.0..8.0), f2.opacity - 0.05, f2.radius - 0.5
-		f2.g -= 0.1 if f2.g > 0
-		f2.r -= 0.05 if f2.r > 0
-		f2.x, f2.y, f2.color, f2.radius = rand(pumpkin2.x + 40..pumpkin2.x + pumpkin2.width- 40), pumpkin2.y + pumpkin2.height - 35, [1, 1, 0, 1], rand(5..20) if (f2.radius <= 0).|(f2.opacity <= 0)
+		f2.x, f2.y, f2.opacity, f2.radius = f2.x + Math.sin(i / rand(1.0..8.0)) * 8.0, f2.y - rand(5.0..8.0), f2.opacity - 0.05, f2.radius - 0.5
+		f2.r -= 0.05 if f2.r > 0 && rand < 0.75
+		f2.b += 0.05 if f2.b < 1 && rand < 0.5
+		f2.x, f2.y, f2.color, f2.radius = rand(pumpkin2.x + 40..pumpkin2.x + pumpkin2.width - 40), pumpkin2.y + pumpkin2.height - 35, [1, 0, 0, 1], rand(5..20) if (f2.radius <= 0).|(f2.opacity <= 0)
 	end
 
 	# flash the light of the house randomly, give the haunted house look and feel
@@ -114,10 +128,11 @@ update do
 	fire_base.each { |f| f.x, f.y = get(:mouse_x) + Math.sin(i), get(:mouse_y) + Math.cos(i) }
 
 	fire_particles.each do |pr|
-		pr.x, pr.y, pr.radius, pr.opacity = pr.x + Math.sin(i / rand(1..3)), pr.y - 7.5, pr.radius - rand(0.1..1), pr.opacity - 0.04
+		pr.x, pr.y, pr.radius, pr.opacity = pr.x, pr.y - 7, pr.radius - rand(0.1..1), pr.opacity - 0.02
 		pr.g -= 0.1 if pr.g > 0
 		pr.r -= 0.025 if pr.r > 0
-		pr.x, pr.y, pr.radius, pr.color = rand(get(:mouse_x) - 10..get(:mouse_x) + 10), rand(get(:mouse_y) - 10..get(:mouse_y) + 10), rand(2..10), [1, 1, 0, 0.6] if pr.radius.<=(0).|(pr.opacity.<=(0))
+		pr.b += 0.1 if pr.g < 0.25
+		pr.x, pr.y, pr.radius, pr.color = rand(get(:mouse_x) - 12..get(:mouse_x) + 12), rand(get(:mouse_y) - 8..get(:mouse_y) + 8), rand(2..10), [1, 1, 0, 0.5] if pr.radius.<=(0).|(pr.opacity.<=(0))
 	end
 
 	# flash the stars
